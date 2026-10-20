@@ -1,8 +1,27 @@
 # comfyui-sandbox-global
 
-DOBEDUB ComfyUI 샌드박스 이미지 — **CUDA 12.8 / torch 2.11 / SageAttention(sm_90·100·120)**.
-모델은 이미지에 넣지 않고 **Global Volume `dobedub_comfyui_global` (`cmvg1al16000007ld31td00oc`)** 에서 읽는다.
-→ 데이터센터에 묶이지 않고 재고 있는 GPU(H100 NVL / H200 / B200 / RTX PRO 6000) 어디서나 기동.
+DOBEDUB ComfyUI 샌드박스 이미지 2종. 모델은 이미지에 넣지 않고 **Global Volume `dobedub_comfyui_global` (`cmvg1al16000007ld31td00oc`)** 에서 읽는다.
+
+| 태그 | 대상 GPU | CUDA / torch | SageAttention | 비고 |
+| --- | --- | --- | --- | --- |
+| `:cu130` (주력) | B200(sm_100), RTX PRO 6000(sm_120) | 13.0.2 / 2.11.0+cu130 | sm_100·sm_120 | NVFP4·INT8(comfy-kitchen CUDA) 가속, onnxruntime-gpu 1.28.0, cupy-cuda13x |
+| `:cu128` | H100 NVL, H200(sm_90) | 12.8.1 / 2.11.0+cu128 | sm_90 | FP4 하드웨어 없음, onnxruntime-gpu 1.26.0, cupy-cuda12x |
+
+GPU와 이미지가 맞지 않으면 기동 로그에 `sandbox: WARNING ... -> use :cu130/:cu128` 가 출력된다.
+
+## 기동 최적화 (start.sh)
+- 기본 인자: `--fast fp8_matrix_mult --use-sage-attention --enable-compress-response-body` (`COMFY_ARGS` 로 덮어쓰기)
+  - `--cache-none` 제거 → 실행마다 모델을 Global Volume 에서 다시 읽지 않음
+  - `--disable-pinned-memory` 제거 → 대용량 RAM 호스트에서 전송 효율
+  - 응답 gzip → `object_info` 6.2MB → 0.7MB
+- SageAttention 정확도 검사(SDPA 대비 cos>0.99) 실패 시 자동으로 sage 끄고 기동
+- models: Global Volume 을 로컬 폴더 + 파일별 심볼릭 링크로 미러링 (목록 조회 로컬 속도)
+- `PRELOAD_MODELS`: 지정 모델을 컨테이너 디스크로 백그라운드 복사 후 링크 교체 (NVMe 속도 로딩)
+- `MANAGER_NETWORK_MODE=offline`(기본): 기동 시 Registry 수집 생략
+- 워크플로·출력 5분 주기 Global Volume 백업 (mtime 미지원 → 체크섬/크기 비교)
+
+## 커스텀 노드 (24개 활성)
+`env/custom_nodes.txt` — `#` 로 시작하는 줄은 제외. 2026-10-20 UI 로딩 경량화로 19개 제외(주석에 사유).
 
 ## 구성
 | 파일 | 역할 |

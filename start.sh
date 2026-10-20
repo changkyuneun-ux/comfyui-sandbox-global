@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DOBEDUB ComfyUI Sandbox (Global Volume / CUDA 12.8)
+# DOBEDUB ComfyUI Sandbox (Global Volume / 이미지 cu130=Blackwell, cu128=Hopper)
 # - 모델: Global Volume(/workspace-global/models)을 ComfyUI/models 로 연결 (읽기 위주)
 # - 워크플로: 기동 시 Global Volume → 로컬로 복사, 저장분은 주기적으로 Global Volume에 백업
 # - 출력: 로컬 디스크에 저장 → 5분마다 Global Volume에 백업 (Global Volume은 rename/lock 미지원)
@@ -21,7 +21,12 @@ if [ -n "${JUPYTER_PASSWORD:-}" ]; then
     --ServerApp.token="$JUPYTER_PASSWORD" --ServerApp.root_dir=/ > /var/log/jupyter.log 2>&1 &
 fi
 
-: "${COMFY_ARGS:=--fast fp8_matrix_mult --use-sage-attention --cache-none --disable-pinned-memory}"
+# 기본 실행 인자 (env COMFY_ARGS 로 덮어쓰기 가능)
+#  - --cache-none 제거: 매 실행마다 로더 노드가 다시 돌아 모델을 Global Volume 에서 재로딩하는 것을 방지 (기본 RAM 압력 캐시 사용)
+#  - --disable-pinned-memory 제거: B200(377GB)/RTX PRO 6000(188GB) RAM 에서 pinned 전송이 유리
+#  - --enable-compress-response-body: object_info 6.2MB → 0.7MB (gzip)
+: "${COMFY_ARGS:=--fast fp8_matrix_mult --use-sage-attention --enable-compress-response-body}"
+: "${MANAGER_NETWORK_MODE:=offline}"   # 기동 시 Registry 204페이지 수집 생략 (노드 설치는 이미지 재빌드로만)
 
 # --- GPU / 스택 확인 ---
 python - <<'PY' || { echo "sandbox: GPU check FAILED" >&2; exit 1; }
@@ -29,6 +34,14 @@ import torch
 torch.cuda.init(); n=torch.cuda.get_device_name(0); c=torch.cuda.get_device_capability(0)
 (torch.zeros(8,device='cuda')+1).sum().item()
 print(f"sandbox: GPU OK {n} (sm_{c[0]}{c[1]}) torch {torch.__version__} cuda {torch.version.cuda}")
+import os
+v=os.environ.get("IMAGE_VARIANT","?"); arch=c[0]*10+c[1]
+if v=="cu128" and arch>=100: print(f"sandbox: WARNING Blackwell GPU(sm_{arch}) on cu128 image -> use :cu130 (NVFP4/INT8 가속, SageAttention)")
+if v=="cu130" and arch<100: print(f"sandbox: WARNING Hopper GPU(sm_{arch}) on cu130 image -> use :cu128 (SageAttention sm_90)")
+try:
+    import comfy_kitchen  # noqa
+    print("sandbox: image variant", v)
+except Exception: pass
 try:
     import sageattention; print("sandbox: sageattention", getattr(sageattention,'__version__','ok'))
 except Exception as e: print("sandbox: sageattention FAIL", e)
@@ -60,21 +73,52 @@ PY
   fi
 fi
 
-# --- 모델: Global Volume 연결 ---
+# --- 모델: Global Volume 을 "로컬 폴더 + 파일별 심볼릭 링크" 로 미러링 ---
+#   ComfyUI·노드는 UI 접속(/object_info)마다 models 폴더 전체를 훑는다.
+#   Global Volume(오브젝트 스토리지)을 직접 훑으면 목록 조회가 느리므로, 폴더 구조는 로컬에 두고
+#   파일만 Global Volume 을 가리키게 한다 (목록=로컬 속도, 읽기=Global Volume).
 if [ -d "$GV/models" ]; then
-  rm -rf "$C/models" && ln -s "$GV/models" "$C/models"
-  echo "sandbox: models -> $GV/models"
+  t0=$(date +%s)
+  rm -rf "$C/models" && mkdir -p "$C/models"
+  (cd "$GV/models" && find . -type d) | while IFS= read -r d; do mkdir -p "$C/models/$d"; done
+  (cd "$GV/models" && find . -type f) | while IFS= read -r f; do ln -sf "$GV/models/${f#./}" "$C/models/$f"; done
+  echo "sandbox: models mirrored $(find "$C/models" -type l | wc -l) links in $(( $(date +%s) - t0 ))s ($GV/models)"
 else
   echo "sandbox: WARNING $GV/models 없음 (Global Volume 미연결?)" >&2
+fi
+
+# --- ComfyUI-Manager 네트워크 모드 ---
+MCFG="$C/user/__manager/config.ini"; mkdir -p "$(dirname "$MCFG")"
+if [ -f "$MCFG" ] && grep -q '^network_mode' "$MCFG"; then sed -i "s/^network_mode.*/network_mode = $MANAGER_NETWORK_MODE/" "$MCFG"
+else printf '[default]\nnetwork_mode = %s\n' "$MANAGER_NETWORK_MODE" >> "$MCFG"; fi
+echo "sandbox: ComfyUI-Manager network_mode=$MANAGER_NETWORK_MODE"
+
+# --- 대형 모델 로컬 캐시 (선택) ---
+#   PRELOAD_MODELS="text_encoders/a.safetensors,unet/b.safetensors" (models/ 기준 상대경로, 콤마 구분)
+#   Global Volume → 컨테이너 디스크(/opt/model-cache)로 백그라운드 복사 후 링크를 로컬로 교체.
+#   ComfyUI 는 바로 기동하고, 복사가 끝난 모델부터 로컬 NVMe 속도로 읽는다. 디스크 여유가 부족하면 건너뜀.
+if [ -n "${PRELOAD_MODELS:-}" ] && [ -d "$GV/models" ]; then
+  ( IFS=',' ; for rel in $PRELOAD_MODELS; do
+      rel="$(echo "$rel" | xargs)"; src="$GV/models/$rel"; dst="/opt/model-cache/$rel"
+      [ -f "$src" ] || { echo "sandbox: preload SKIP (없음) $rel"; continue; }
+      need=$(( $(stat -c %s "$src") / 1048576 + 2048 )); free=$(df -Pm /opt | awk 'NR==2{print $4}')
+      [ "$free" -gt "$need" ] || { echo "sandbox: preload SKIP (디스크 부족 need=${need}MB free=${free}MB) $rel"; continue; }
+      mkdir -p "$(dirname "$dst")"; t0=$(date +%s)
+      if rsync -a --inplace "$src" "$dst.part" && mv "$dst.part" "$dst"; then
+        ln -sfn "$dst" "$C/models/$rel"
+        echo "sandbox: preload OK $rel ($(( $(stat -c %s "$dst") / 1073741824 ))GB, $(( $(date +%s) - t0 ))s)"
+      else echo "sandbox: preload FAIL $rel"; rm -f "$dst.part"; fi
+    done; echo "sandbox: preload done" ) &
 fi
 
 # --- 워크플로 복원 + 주기 백업 / 출력 주기 백업 ---
 WF="$C/user/default/workflows"; mkdir -p "$WF" "$C/output" "$GV/workflows" "$GV/output"
 cp -rn "$GV/workflows/." "$WF/" 2>/dev/null || true
-SYNC="rsync -rlt --inplace --no-perms --no-owner --no-group"
+# Global Volume 은 파일 시간(mtime) 설정을 지원하지 않음 → -t 없이, 비교는 체크섬(워크플로)/크기(출력)로
+SYNC="rsync -rl --inplace --no-perms --no-owner --no-group --omit-dir-times"
 ( while true; do sleep "${SYNC_INTERVAL:-300}"
-    $SYNC "$WF/" "$GV/workflows/"
-    $SYNC "$C/output/" "$GV/output/"
+    $SYNC --checksum "$WF/" "$GV/workflows/" 2>&1 | grep -v "failed to set times" || true
+    $SYNC --size-only "$C/output/" "$GV/output/" 2>&1 | grep -v "failed to set times" || true
   done ) &
 
 echo "sandbox: starting ComfyUI ${COMFY_ARGS}"

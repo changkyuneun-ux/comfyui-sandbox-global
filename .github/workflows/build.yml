@@ -12,10 +12,26 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 300   # SageAttention 3개 아키텍처 컴파일 (예상 60~120분)
+    timeout-minutes: 300
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: cu130          # Blackwell: B200, RTX PRO 6000 (주력)
+            cuda_tag: 13.0.2-cudnn
+            torch_index: https://download.pytorch.org/whl/cu130
+            sage_archs: "10.0;12.0"
+            cupy: cupy-cuda13x==14.2.0
+            ort: onnxruntime-gpu==1.28.0
+          - variant: cu128          # Hopper: H100 NVL, H200
+            cuda_tag: 12.8.1-cudnn
+            torch_index: https://download.pytorch.org/whl/cu128
+            sage_archs: "9.0"
+            cupy: cupy-cuda12x==14.2.0
+            ort: onnxruntime-gpu==1.26.0
     steps:
       - uses: actions/checkout@v4
 
@@ -48,15 +64,22 @@ jobs:
         with:
           driver: docker
 
-      - name: Build and push
+      - name: Build and push (${{ matrix.variant }})
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: linux/amd64
+          build-args: |
+            IMAGE_VARIANT=${{ matrix.variant }}
+            CUDA_TAG=${{ matrix.cuda_tag }}
+            TORCH_INDEX=${{ matrix.torch_index }}
+            SAGE_ARCHS=${{ matrix.sage_archs }}
+            CUPY_PKG=${{ matrix.cupy }}
+            ORT_PKG=${{ matrix.ort }}
           tags: |
-            ${{ env.IMAGE }}:cu128-${{ github.sha }}
-            ${{ env.IMAGE }}:cu128
+            ${{ env.IMAGE }}:${{ matrix.variant }}
+            ${{ env.IMAGE }}:${{ matrix.variant }}-${{ github.sha }}
 
       - name: Disk usage after build
         if: always()
