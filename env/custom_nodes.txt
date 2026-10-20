@@ -1,5 +1,5 @@
 GIT|Anomalous_Model_Browser|https://github.com/DemonGatanjieu/Anomalous_Model_Browser|bb530c47bbec7fc8e561d5bf4c2a86860d4903dc
-GIT|Civicomfy|https://github.com/MoonGoblinDev/Civicomfy.git|838378f2bd70bc2b4f8ad2e24890b45a206d319a
+GIT|Civicomfy|https://github.com/MoonGoblinDev/Civicomfy.git|555e984bbcb02fc955075cb8eb699a6884c51239
 GIT|ComfyUI-Custom-Scripts|https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git|609f3afaa74b2f88ef9ce8d939626065e3247469
 GIT|ComfyUI-EditUtils|https://github.com/lrzjason/ComfyUI-EditUtils.git|45f2ac44edbdce242e40dc7e0b16c133290831b9
 GIT|ComfyUI-Fantastic-MiniMaxH3-PromptBuilder|https://github.com/Adudeguyman/ComfyUI-Fantastic-MiniMaxH3-PromptBuilder.git|22e719fe89336c628383363182a4da3cb58d4f9b
@@ -9,12 +9,12 @@ GIT|ComfyUI-H3-Prompt-IDE|https://github.com/ethanfel/ComfyUI-H3-Prompt-IDE.git|
 GIT|ComfyUI-Image-Saver|https://github.com/alexopus/ComfyUI-Image-Saver.git|b4b349e553d0f43713fa6914708b70b296392f73
 GIT|ComfyUI-KJNodes|https://github.com/kijai/ComfyUI-KJNodes.git|d3cfe21625e5170126ce06fbfcfe1d88108688c3
 GIT|ComfyUI-Krea2-NAG|https://github.com/iljung1106/ComfyUI-Krea2-NAG.git|0afb38dfc4ae4040d621ac5a46e1761b83fa2a43
-GIT|ComfyUI-Krea2T-Enhancer|https://github.com/capitan01R/ComfyUI-Krea2T-Enhancer.git|85baaf0145b532ce3418b016cefca76f90648d6d
+VENDOR|ComfyUI-Krea2T-Enhancer|vendor/ComfyUI-Krea2T-Enhancer.tar.gz|85baaf0145b5 (원격 저장소 삭제됨)
 GIT|ComfyUI-Krea2TextEncoder|https://github.com/ethanfel/ComfyUI-Krea2TextEncoder.git|38da10b0d4655098d867c14af10093baa76a85c4
-GIT|ComfyUI-Manager|https://github.com/ltdrdata/ComfyUI-Manager.git|6c189b67f3f2b4a2e43d4d20eb13d43b978c2e84
+GIT|ComfyUI-Manager|https://github.com/ltdrdata/ComfyUI-Manager.git|c352b16bb1862aa8b5dacf90a0c9216a4249f5bd
 GIT|ComfyUI-Pixaroma|https://github.com/pixaroma/ComfyUI-Pixaroma.git|5906cb89f5d96fbbd2019a9b1a2d4f43002dccee
 GIT|ComfyUI-QwenVL|https://github.com/1038lab/ComfyUI-QwenVL.git|1b67b443918801f571714bab636edc1845b7002a
-GIT|ComfyUI-RunpodDirect|https://github.com/MadiatorLabs/ComfyUI-RunpodDirect.git|2bd1dbabe65b074c4a6480a9d6ee2dbf604bc24a
+GIT|ComfyUI-RunpodDirect|https://github.com/MadiatorLabs/ComfyUI-RunpodDirect.git|809065c9d2f3874dc215106784af49f3f0cb368f
 GIT|ComfyUI-VFI|https://github.com/GACLove/ComfyUI-VFI|6176a430f12cd16003f4664c1e3c6af8e96cc3c6
 GIT|ComfyUI-WanAnimatePreprocess|https://github.com/kijai/ComfyUI-WanAnimatePreprocess.git|0e0b6a2a555625acf4d4aefb780e27d06937132f
 GIT|ComfyUI-WanVideoWrapper|https://github.com/kijai/ComfyUI-WanVideoWrapper.git|088128b224242e110d3906c6750e9a3a348a659b

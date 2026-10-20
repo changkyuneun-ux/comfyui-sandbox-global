@@ -49,7 +49,8 @@ RUN git clone https://github.com/comfyanonymous/ComfyUI /opt/ComfyUI \
 
 # 3) 커스텀 노드 (GIT=커밋 고정, REG=Registry 버전 고정)
 COPY install_nodes.py /tmp/install_nodes.py
-RUN python /tmp/install_nodes.py /tmp/env/custom_nodes.txt /opt/ComfyUI/custom_nodes
+COPY vendor/ /tmp/vendor/
+RUN python /tmp/install_nodes.py /tmp/env/custom_nodes.txt /opt/ComfyUI/custom_nodes /tmp
 
 # 4) Python 패키지: 기존 .venv-cu128 의 freeze 그대로 (--no-deps: 버전 해석 없이 동일 재현)
 #    Ubuntu 시스템 패키지(apt 유래)는 제외
