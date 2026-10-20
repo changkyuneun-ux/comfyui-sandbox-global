@@ -1,0 +1,54 @@
+# comfyui-sandbox-global
+
+DOBEDUB ComfyUI 샌드박스 이미지 — **CUDA 12.8 / torch 2.11 / SageAttention(sm_90·100·120)**.
+모델은 이미지에 넣지 않고 **Global Volume `dobedub_comfyui_global` (`cmvg1al16000007ld31td00oc`)** 에서 읽는다.
+→ 데이터센터에 묶이지 않고 재고 있는 GPU(H100 NVL / H200 / B200 / RTX PRO 6000) 어디서나 기동.
+
+## 구성
+| 파일 | 역할 |
+| --- | --- |
+| `Dockerfile` | Stage1 SageAttention 휠 빌드(devel) → Stage2 runtime 이미지 |
+| `env/custom_nodes.txt` | 커스텀 노드 43개 (GIT=커밋 고정 32, REG=Registry 버전 고정 11). `.disabled` 노드 제외 |
+| `env/requirements.lock.txt` | 기존 Pod `.venv-cu128` 의 `pip freeze` (torch/nvidia/cupy/onnxruntime/sage 제외) |
+| `env/comfyui.commit` | (선택) ComfyUI 커밋. 없으면 `v0.37.0` 태그 |
+| `install_nodes.py` | custom_nodes.txt 설치기 |
+| `start.sh` | SSH·Jupyter 기동, GPU/sage/onnxruntime 점검, models→Global Volume 연결, 워크플로·출력 5분 주기 백업 |
+
+## 기존 환경 대비 변경
+| 항목 | 기존 Pod (`0mwlplq8cvw6bj`) | 신규 이미지 |
+| --- | --- | --- |
+| torch | 2.10.0+cu130 | 2.11.0+cu128 |
+| cupy | cupy-cuda13x 14.2.0 | cupy-cuda12x 14.2.0 |
+| onnxruntime-gpu | 1.28.0 | 1.28.0 (CUDA 12 빌드) |
+| sageattention | 2.2.0 (RTX PRO 6000 빌드) | main (sm_90/100/120 빌드) |
+| 모델 경로 | 네트워크 볼륨 `/workspace/.../models` | Global Volume `/workspace-global/models` (symlink) |
+| 출력/워크플로 | 네트워크 볼륨 | 로컬 디스크 + 5분마다 Global Volume 백업 |
+
+## 빌드
+1. 이 폴더를 새 GitHub 저장소로 push (예: `changkyuneun-ux/comfyui-sandbox-global`)
+2. Actions `build-and-push` 실행 → `ghcr.io/<owner>/comfyui-sandbox-global:cu128`
+3. GHCR 패키지를 **Public** 으로 변경 (또는 RunPod에 레지스트리 인증 등록)
+
+## Pod 설정
+| 항목 | 값 |
+| --- | --- |
+| Image | `ghcr.io/<owner>/comfyui-sandbox-global:cu128` |
+| GPU (우선순위) | B200 → H200 SXM → H200 NVL → H100 NVL → RTX PRO 6000 |
+| CUDA | `minCudaVersion: 12.8` |
+| 데이터센터 | 지정 안 함 |
+| Global Volume | `cmvg1al16000007ld31td00oc` → `/workspace-global` |
+| 컨테이너 디스크 | 150GB |
+| 포트 | `8188/http`, `8888/http`, `22/tcp` |
+| env | `JUPYTER_PASSWORD`(선택), `COMFY_ARGS`(선택, 기본 `--fast fp8_matrix_mult --use-sage-attention --cache-none --disable-pinned-memory`) |
+
+## 기동 확인 (Pod 로그)
+- `sandbox: GPU OK ... torch 2.11.0+cu128 cuda 12.8`
+- `sandbox: sageattention ...` (FAIL 이면 해당 GPU 아키텍처 빌드 누락)
+- `sandbox: onnxruntime providers [...'CUDAExecutionProvider'...]` (없으면 CPU 폴백 → WanAnimate 포즈 검출 느려짐)
+- `sandbox: models -> /workspace-global/models`
+- ComfyUI 로그 `Using sage attention`, 커스텀 노드 import 실패 0건
+
+## 운영 규칙
+- 모델 추가: Global Volume에 업로드 후 **Pod 재시작** (실행 중 Pod는 새 파일을 못 볼 수 있음)
+- 커스텀 노드 추가: Manager로 설치하면 재시작 시 사라짐 → `env/custom_nodes.txt` 수정 후 재빌드
+- 잔액 $0 → 15일 후 Global Volume 영구 삭제. 자동 충전 유지
