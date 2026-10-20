@@ -87,6 +87,12 @@ else
   echo "sandbox: WARNING $GV/models 없음 (Global Volume 미연결?)" >&2
 fi
 
+# --- 사용자 폴더(user/) 복원 + 주기 백업 ---
+#   기존 네트워크 볼륨 환경은 user/ (설정, 워크플로, ComfyUI-Manager 캐시)가 볼륨에 남아 있었다.
+#   컨테이너 디스크에 두면 재시작마다 초기화되므로 Global Volume 에 보관/복원한다. (DB·로그 제외)
+mkdir -p "$C/user" "$GV/user"
+USER_EXCL="--exclude=*.db --exclude=*.db-* --exclude=*.log --exclude=*.lock --exclude=__pycache__"
+rsync -rl --inplace --no-perms --no-owner --no-group $USER_EXCL "$GV/user/" "$C/user/" 2>&1 | grep -v "failed to set times" || true
 # --- ComfyUI-Manager 네트워크 모드 ---
 MCFG="$C/user/__manager/config.ini"; mkdir -p "$(dirname "$MCFG")"
 if [ -f "$MCFG" ] && grep -q '^network_mode' "$MCFG"; then sed -i "s/^network_mode.*/network_mode = $MANAGER_NETWORK_MODE/" "$MCFG"
@@ -118,6 +124,7 @@ cp -rn "$GV/workflows/." "$WF/" 2>/dev/null || true
 SYNC="rsync -rl --inplace --no-perms --no-owner --no-group --omit-dir-times"
 ( while true; do sleep "${SYNC_INTERVAL:-300}"
     $SYNC --checksum "$WF/" "$GV/workflows/" 2>&1 | grep -v "failed to set times" || true
+    $SYNC --checksum $USER_EXCL "$C/user/" "$GV/user/" 2>&1 | grep -v "failed to set times" || true
     $SYNC --size-only "$C/output/" "$GV/output/" 2>&1 | grep -v "failed to set times" || true
   done ) &
 
