@@ -23,6 +23,10 @@ RUN pip install -U pip setuptools wheel ninja packaging \
 RUN git clone --depth 1 --branch ${SAGE_REF} https://github.com/thu-ml/SageAttention.git /src/SageAttention
 # GitHub 러너(4 vCPU/16GB) OOM 방지: 병렬도 최소화
 ENV TORCH_CUDA_ARCH_LIST=${SAGE_ARCHS} EXT_PARALLEL=1 MAX_JOBS=2 NVCC_APPEND_FLAGS="--threads 2"
+# sm_90 확장(_qattn_sm90)은 -lcuda 로 링크한다. 빌드 러너에는 GPU 드라이버(libcuda.so)가 없으므로
+# CUDA 툴킷의 stub 라이브러리로 링크한다 (실행 시에는 호스트 드라이버의 libcuda.so.1 사용)
+ENV LIBRARY_PATH=/usr/local/cuda/lib64/stubs
+RUN ls -la /usr/local/cuda/lib64/stubs/libcuda.so
 RUN cd /src/SageAttention && python -m pip wheel . --no-build-isolation --no-deps -w /wheels && ls -la /wheels
 
 # ---------- Stage 2: 최종 이미지 ----------
