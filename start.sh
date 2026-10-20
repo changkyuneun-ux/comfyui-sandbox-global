@@ -21,6 +21,8 @@ if [ -n "${JUPYTER_PASSWORD:-}" ]; then
     --ServerApp.token="$JUPYTER_PASSWORD" --ServerApp.root_dir=/ > /var/log/jupyter.log 2>&1 &
 fi
 
+: "${COMFY_ARGS:=--fast fp8_matrix_mult --use-sage-attention --cache-none --disable-pinned-memory}"
+
 # --- GPU / 스택 확인 ---
 python - <<'PY' || { echo "sandbox: GPU check FAILED" >&2; exit 1; }
 import torch
@@ -34,6 +36,29 @@ try:
     import onnxruntime as ort; print("sandbox: onnxruntime providers", ort.get_available_providers())
 except Exception as e: print("sandbox: onnxruntime FAIL", e)
 PY
+
+# --- SageAttention 정확도 검사 (실제 GPU에서 PyTorch SDPA와 비교). 실패하면 sage 없이 기동 ---
+if [[ " $COMFY_ARGS " == *" --use-sage-attention "* ]]; then
+  SAGE_RESULT=$(python - <<'PY' 2>&1 | tail -1
+import torch, torch.nn.functional as F
+try:
+    from sageattention import sageattn
+    torch.manual_seed(0)
+    q, k, v = [torch.randn(1, 8, 1024, 128, device="cuda", dtype=torch.bfloat16) for _ in range(3)]
+    o = sageattn(q, k, v, tensor_layout="HND", is_causal=False)
+    r = F.scaled_dot_product_attention(q, k, v)
+    cos = F.cosine_similarity(o.float().flatten(), r.float().flatten(), dim=0).item()
+    print(("OK" if cos > 0.99 else "FAIL") + f" cos={cos:.5f}")
+except Exception as e:
+    print(f"FAIL {type(e).__name__}: {e}")
+PY
+)
+  echo "sandbox: sage check $SAGE_RESULT"
+  if [[ "$SAGE_RESULT" != OK* ]]; then
+    COMFY_ARGS=$(echo " $COMFY_ARGS " | sed 's/ --use-sage-attention / /')
+    echo "sandbox: WARNING sage disabled -> PyTorch attention"
+  fi
+fi
 
 # --- 모델: Global Volume 연결 ---
 if [ -d "$GV/models" ]; then
@@ -52,6 +77,5 @@ SYNC="rsync -rlt --inplace --no-perms --no-owner --no-group"
     $SYNC "$C/output/" "$GV/output/"
   done ) &
 
-: "${COMFY_ARGS:=--fast fp8_matrix_mult --use-sage-attention --cache-none --disable-pinned-memory}"
 echo "sandbox: starting ComfyUI ${COMFY_ARGS}"
 cd "$C" && exec python main.py --listen 0.0.0.0 --port 8188 --enable-cors-header ${COMFY_ARGS}

@@ -21,6 +21,8 @@ RUN pip install -U pip setuptools wheel ninja packaging \
  && pip install torch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} torchaudio==${TORCHAUDIO_VERSION} --index-url ${TORCH_INDEX} \
  && python -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)" && nvcc --version
 RUN git clone --depth 1 --branch ${SAGE_REF} https://github.com/thu-ml/SageAttention.git /src/SageAttention
+COPY patches/sage_patch.py /tmp/sage_patch.py
+RUN python /tmp/sage_patch.py /src/SageAttention
 # GitHub 러너(4 vCPU/16GB) OOM 방지: 병렬도 최소화
 ENV TORCH_CUDA_ARCH_LIST=${SAGE_ARCHS} EXT_PARALLEL=1 MAX_JOBS=2 NVCC_APPEND_FLAGS="--threads 2"
 # sm_90 확장(_qattn_sm90)은 -lcuda 로 링크한다. 빌드 러너에는 GPU 드라이버(libcuda.so)가 없으므로
