@@ -15,8 +15,9 @@ GPU와 이미지가 맞지 않으면 기동 로그에 `sandbox: WARNING ... -> u
   - `--disable-pinned-memory` 제거 → 대용량 RAM 호스트에서 전송 효율
   - 응답 gzip → `object_info` 6.2MB → 0.7MB
 - SageAttention 정확도 검사(SDPA 대비 cos>0.99) 실패 시 자동으로 sage 끄고 기동
-- models: Global Volume 을 로컬 폴더 + 파일별 심볼릭 링크로 미러링 (목록 조회 로컬 속도)
-- `PRELOAD_MODELS`: 지정 모델을 컨테이너 디스크로 백그라운드 복사 후 링크 교체 (NVMe 속도 로딩)
+- models / input: `/opt/ComfyUI/models`·`input` → Global Volume 디렉터리 링크. 모델은 Global Volume 에 직접 다운로드하고 UI 새로고침(R)으로 반영 (2026-10-21 측정: 목록 조회 직접 8ms vs 파일별 링크 2ms → 미러 불필요)
+- `PRELOAD_MODELS`: 지정 모델을 `/opt/model-cache` 로 백그라운드 복사, `extra_model_paths.yaml` 우선 경로로 등록 (복사 완료 후 로컬 사본 우선 로딩)
+- 노드 추가 = `env/custom_nodes.txt` 수정 → push → 빌드 → 새 해시 태그로 배포 (Global Volume 에 노드 두지 않음)
 - `MANAGER_NETWORK_MODE=offline`(기본): 기동 시 Registry 수집 생략
 - 워크플로·출력 5분 주기 Global Volume 백업 (mtime 미지원 → 체크섬/크기 비교)
 
@@ -40,7 +41,7 @@ GPU와 이미지가 맞지 않으면 기동 로그에 `sandbox: WARNING ... -> u
 | cupy | cupy-cuda13x 14.2.0 | cupy-cuda12x 14.2.0 |
 | onnxruntime-gpu | 1.28.0 | 1.28.0 (CUDA 12 빌드) |
 | sageattention | 2.2.0 (RTX PRO 6000 빌드) | main (sm_90/100/120 빌드) |
-| 모델 경로 | 네트워크 볼륨 `/workspace/.../models` | Global Volume `/workspace-global/models` (symlink) |
+| 모델 경로 | 네트워크 볼륨 `/workspace/.../models` | Global Volume `/workspace-global/models` (디렉터리 링크) |
 | 출력/워크플로 | 네트워크 볼륨 | 로컬 디스크 + 5분마다 Global Volume 백업 |
 
 ## 빌드
