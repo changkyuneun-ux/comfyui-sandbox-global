@@ -42,7 +42,7 @@ GPU와 이미지가 맞지 않으면 기동 로그에 `sandbox: WARNING ... -> u
 | onnxruntime-gpu | 1.28.0 | 1.28.0 (CUDA 12 빌드) |
 | sageattention | 2.2.0 (RTX PRO 6000 빌드) | main (sm_90/100/120 빌드) |
 | 모델 경로 | 네트워크 볼륨 `/workspace/.../models` | Global Volume `/workspace-global/models` (디렉터리 링크) |
-| 출력/워크플로 | 네트워크 볼륨 | 로컬 디스크 + 5분마다 Global Volume 백업 |
+| 출력/워크플로 | 네트워크 볼륨 | 로컬 디스크 + 5분마다 Global Volume 백업 (출력은 `output/<PodID>_<기동시각UTC>/` 세션별 폴더) |
 
 ## 빌드
 1. 이 폴더를 새 GitHub 저장소로 push (예: `changkyuneun-ux/comfyui-sandbox-global`)

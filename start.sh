@@ -133,14 +133,18 @@ if [ -n "${PRELOAD_MODELS:-}" ] && [ -d "$GV/models" ]; then
 fi
 
 # --- 워크플로 복원 + 주기 백업 / 출력 주기 백업 ---
-WF="$C/user/default/workflows"; mkdir -p "$WF" "$C/output" "$GV/workflows" "$GV/output"
+# 출력은 기동(세션)마다 별도 폴더로 백업한다: 로컬 output 은 기동 때마다 비어 있어 ComfyUI 번호가 00001 부터 다시 시작하고,
+#   여러 Pod/재기동이 같은 폴더에 --size-only 로 동기화하면 같은 이름 파일을 서로 덮어쓰기 때문 (2026-10-29 확인).
+OUT_DST="$GV/output/${RUNPOD_POD_ID:-$(hostname)}_$(date -u +%Y%m%d-%H%M%S)"
+WF="$C/user/default/workflows"; mkdir -p "$WF" "$C/output" "$GV/workflows" "$OUT_DST"
+echo "sandbox: output backup -> $OUT_DST"
 cp -rn "$GV/workflows/." "$WF/" 2>/dev/null || true
 # Global Volume 은 파일 시간(mtime) 설정을 지원하지 않음 → -t 없이, 비교는 체크섬(워크플로)/크기(출력)로
 SYNC="rsync -rl --inplace --no-perms --no-owner --no-group --omit-dir-times"
 ( while true; do sleep "${SYNC_INTERVAL:-300}"
     $SYNC --checksum "$WF/" "$GV/workflows/" 2>&1 | grep -v "failed to set times" || true
     $SYNC --checksum $USER_EXCL "$C/user/" "$GV/user/" 2>&1 | grep -v "failed to set times" || true
-    $SYNC --size-only "$C/output/" "$GV/output/" 2>&1 | grep -v "failed to set times" || true
+    $SYNC --size-only "$C/output/" "$OUT_DST/" 2>&1 | grep -v "failed to set times" || true
   done ) &
 
 echo "sandbox: starting ComfyUI ${COMFY_ARGS}"
