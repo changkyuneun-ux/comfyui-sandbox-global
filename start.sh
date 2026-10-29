@@ -19,7 +19,8 @@ fi
 # --- Jupyter (파일 업/다운로드용, JUPYTER_PASSWORD 있을 때만) ---
 if [ -n "${JUPYTER_PASSWORD:-}" ]; then
   nohup jupyter lab --allow-root --no-browser --ip=0.0.0.0 --port=8888 \
-    --ServerApp.token="$JUPYTER_PASSWORD" --ServerApp.root_dir=/ > /var/log/jupyter.log 2>&1 &
+    --ServerApp.token="$JUPYTER_PASSWORD" --ServerApp.root_dir=/ \
+    --ServerApp.allow_origin_pat='https://.*\.proxy\.runpod\.net' > /var/log/jupyter.log 2>&1 &
 fi
 
 # 기본 실행 인자 (env COMFY_ARGS 로 덮어쓰기 가능)
